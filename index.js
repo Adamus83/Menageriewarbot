@@ -21,7 +21,7 @@ const CLANS = {
   aves: {name:'🦜 Aves Dominion', starter:'Elang Perak'}
 };
 
-async function get(sheet){ const r=await sheets.spreadsheets.values.get({spreadsheetId:SHEET,range:`${sheet}!A2:Z`}); return r.data.values||[] }
+async function get(s){ const r=await sheets.spreadsheets.values.get({spreadsheetId:SHEET,range:`${s}!A2:Z`}).catch(()=>({data:{values:[]}})); return r.data.values||[] }
 async function findUser(id){ return (await get('Users')).find(r=>r[0]==id) }
 
 bot.onText(/\/start/, async m=>{
@@ -33,28 +33,31 @@ bot.onText(/\/start/, async m=>{
 });
 
 bot.on('callback_query', async q=>{
-  bot.answerCallbackQuery(q.id);
-  if(!q.data.startsWith('join_')) return;
-  const clan = q.data.split('_')[1];
-  if(await findUser(String(q.from.id))) return;
+  try{
+    bot.answerCallbackQuery(q.id);
+    if(!q.data.startsWith('join_')) return;
+    const clan = q.data.split('_')[1];
+    if(await findUser(String(q.from.id))) return;
 
-  // buat sheet kalau belum ada
-  try{ await sheets.spreadsheets.values.get({spreadsheetId:SHEET,range:'Users!A1'});}catch{ await sheets.spreadsheets.batchUpdate({spreadsheetId:SHEET,requestBody:{requests:[{addSheet:{properties:{title:'Users'}}}]}}); await sheets.spreadsheets.values.update({spreadsheetId:SHEET,range:'Users!A1',valueInputOption:'RAW',requestBody:{values:[['userId','name','coins','premium','clan']]}})}
+    // buat header kalau belum ada
+    try{ await sheets.spreadsheets.values.get({spreadsheetId:SHEET,range:'Users!A1'}); }
+    catch{ await sheets.spreadsheets.values.update({spreadsheetId:SHEET,range:'Users!A1',valueInputOption:'RAW',requestBody:{values:[['userId','name','coins','premium','clan']]}}); }
 
-  await sheets.spreadsheets.values.append({spreadsheetId:SHEET,range:'Users!A2',valueInputOption:'RAW',requestBody:{values:[[String(q.from.id),q.from.first_name,1000,0,clan]]}});
+    await sheets.spreadsheets.values.append({spreadsheetId:SHEET,range:'Users!A2',valueInputOption:'RAW',requestBody:{values:[[String(q.from.id),q.from.first_name,1000,0,clan]]}});
 
-  bot.sendMessage(q.message.chat.id, `✅ Bergabung ${CLANS[clan].name}!\nStarter: ${CLANS[clan].starter}\n+1000 koin\n\nKetik /menu`);
+    await bot.sendMessage(q.message.chat.id, `✅ Bergabung ${CLANS.name}!\nStarter: ${CLANS[clan].starter}\n+1000 koin\n\nKetik /menu`);
+  }catch(e){ console.error(e) }
 });
 
 bot.onText(/\/menu/, async m=>{
   const u = await findUser(String(m.from.id));
   if(!u) return bot.sendMessage(m.chat.id,'/start dulu');
-  bot.sendMessage(m.chat.id, `📱 MENU\nKlan: ${CLANS[u[4]].name}\n🪙 Koin: ${u[2]}\n\n/saldo /daily /pet`);
+  bot.sendMessage(m.chat.id, `📱 MENU\nKlan: ${CLANS[u[4]].name}\n🪙 Koin: ${u[2]}\n\n/saldo /daily`);
 });
 
 bot.onText(/\/saldo/, async m=>{
   const u = await findUser(String(m.from.id));
-  bot.sendMessage(m.chat.id, u?`💰 ${u[2]} koin`:' /start dulu');
+  bot.sendMessage(m.chat.id, u?`💰 ${u[2]} koin`:'/start dulu');
 });
 
 bot.onText(/\/daily/, async m=>{
