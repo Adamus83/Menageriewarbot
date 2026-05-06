@@ -45,7 +45,7 @@ bot.on('callback_query', async q=>{
 
     await sheets.spreadsheets.values.append({spreadsheetId:SHEET,range:'Users!A2',valueInputOption:'RAW',requestBody:{values:[[String(q.from.id),q.from.first_name,1000,0,clan]]}});
 
-    await bot.sendMessage(q.message.chat.id, `✅ Bergabung ${CLANS.name}!\nStarter: ${CLANS[clan].starter}\n+1000 koin\n\nKetik /menu`);
+    await bot.sendMessage(q.message.chat.id, `✅ Bergabung ${CLANS[clan].name}!\nStarter: ${CLANS[clan].starter}\n+1000 koin\n\nKetik /menu`);
   }catch(e){ console.error(e) }
 });
 
