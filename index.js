@@ -1,3 +1,12 @@
+// Tangkap SEMUA error yang tidak terhandle
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err.message);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
 const TelegramBot = require('node-telegram-bot-api');
 const { google } = require('googleapis');
 const http = require('http');
