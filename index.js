@@ -53,15 +53,9 @@ bot.start(async (ctx) => {
       monsters: '',
       joined: new Date().toISOString()
     });
-    await ctx.reply(`🎮 Selamat datang di Menagerie Wars, ${ctx.from.first_name}!
-
-Akun kamu sudah dibuat.
-Saldo: 0
-
-Ketik /topup untuk isi saldo manual.`);
+    await ctx.reply(`🎮 Selamat datang di Menagerie Wars, ${ctx.from.first_name}!\n\nAkun kamu sudah dibuat.\nSaldo: 0\n\nKetik /topup untuk isi saldo manual.`);
   } else {
-    await ctx.reply(`Welcome back, ${player.nama}!
-Saldo: ${player.saldo}`);
+    await ctx.reply(`Welcome back, ${player.nama}!\nSaldo: ${player.saldo}`);
   }
 });
 
@@ -77,18 +71,10 @@ bot.command('topup', async (ctx) => {
   const amount = ctx.message.text.split(' ')[1];
   if (!amount) return ctx.reply('Format: /topup 50000');
   
-  await ctx.reply(`📝 Permintaan topup Rp${amount} dicatat.
-
-Silakan transfer manual, lalu konfirmasi ke admin.
-Admin akan approve dengan /approve ${ctx.from.id} ${amount}`);
+  await ctx.reply(`📝 Permintaan topup Rp${amount} dicatat.\n\nSilakan transfer manual, lalu konfirmasi ke admin.\nAdmin akan approve dengan /approve ${ctx.from.id} ${amount}`);
   
   if (ADMIN_ID) {
-    await bot.telegram.sendMessage(ADMIN_ID, `🔔 TOPUP BARU
-Dari: ${ctx.from.first_name} (@${ctx.from.username})
-ID: ${ctx.from.id}
-Jumlah: Rp${amount}
-
-Approve: /approve ${ctx.from.id} ${amount}`);
+    await bot.telegram.sendMessage(ADMIN_ID, `🔔 TOPUP BARU\nDari: ${ctx.from.first_name} (@${ctx.from.username})\nID: ${ctx.from.id}\nJumlah: Rp${amount}\n\nApprove: /approve ${ctx.from.id} ${amount}`);
   }
 });
 
@@ -110,10 +96,7 @@ bot.command('approve', async (ctx) => {
 });
 
 bot.command('help', (ctx) => {
-  ctx.reply(`/start - daftar
-/saldo - cek saldo
-/topup <jumlah> - minta topup
-/help - bantuan`);
+  ctx.reply(`/start - daftar\n/saldo - cek saldo\n/topup <jumlah> - minta topup\n/help - bantuan`);
 });
 
 bot.catch((err) => console.error('Bot error:', err));
