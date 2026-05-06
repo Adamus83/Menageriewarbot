@@ -4,31 +4,23 @@ const http = require('http');
 
 // ===== GLOBAL ERROR CATCHER =====
 process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT:', err.message, err.stack?.split('\n')[1]);
+  console.error('UNCAUGHT:', err.message);
 });
 process.on('unhandledRejection', (reason) => {
   console.error('REJECTION:', reason?.message || reason);
 });
 
-// ===== HEALTH SERVER =====
+// ===== CONFIG =====
 const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('OK');
-}).listen(PORT, '0.0.0.0', () => {
-  console.log(`HEALTH:${PORT}`);
-});
+const URL = process.env.RAILWAY_PUBLIC_DOMAIN 
+  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+  : process.env.URL || `http://localhost:${PORT}`;
 
-// ===== GOOGLE AUTH (dengan validasi) =====
+// ===== GOOGLE AUTH =====
 const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
   .replace(/\\n/g, '\n')
   .replace(/"/g, '')
   .trim();
-
-if (!privateKey.includes('BEGIN PRIVATE KEY')) {
-  console.error('FATAL: Private key format salah!');
-  console.error('RAW:', process.env.GOOGLE_PRIVATE_KEY?.substring(0, 30));
-}
 
 let auth;
 try {
@@ -38,7 +30,6 @@ try {
     privateKey,
     ['https://www.googleapis.com/auth/spreadsheets']
   );
-  // Tes auth
   auth.authorize().then(() => console.log('AUTH:OK')).catch(e => console.error('AUTH:FAIL', e.message));
 } catch (e) {
   console.error('AUTH INIT ERROR:', e.message);
@@ -47,10 +38,17 @@ try {
 const sheets = google.sheets({ version: 'v4', auth });
 const SHEET = process.env.GOOGLE_SHEET_ID;
 
-// ===== BOT SETUP =====
+// ===== BOT SETUP (WEBHOOK MODE) =====
 let bot;
 try {
-  bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+  bot = new TelegramBot(process.env.BOT_TOKEN, { 
+    webHook: { port: PORT }
+  });
+  bot.setWebHook(`${URL}/bot`).then(() => {
+    console.log(`WEBHOOK SET: ${URL}/bot`);
+  }).catch(e => {
+    console.error('WEBHOOK ERROR:', e.message);
+  });
   console.log('BOT:OK');
 } catch (e) {
   console.error('BOT INIT ERROR:', e.message);
@@ -90,8 +88,7 @@ const findUser = async (userId) => {
 const ensureHeader = async () => {
   try {
     await sheets.spreadsheets.values.get({ spreadsheetId: SHEET, range: 'Users!A1' });
-  } catch (e) {
-    console.error('HEADER CHECK, creating...');
+  } catch {
     try {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET,
@@ -99,9 +96,8 @@ const ensureHeader = async () => {
         valueInputOption: 'RAW',
         requestBody: { values: [['userId', 'name', 'coins', 'premium', 'clan']] }
       });
-      console.log('HEADER:CREATED');
-    } catch (e2) {
-      console.error('HEADER CREATE ERROR:', e2.message);
+    } catch (e) {
+      console.error('HEADER ERROR:', e.message);
     }
   }
 };
@@ -153,7 +149,6 @@ bot.onText(/\/start/, async m => {
     });
   } catch (e) {
     console.error('/start ERROR:', e.message);
-    bot.sendMessage(m.chat.id, 'Error, coba lagi nanti').catch(() => {});
   }
 });
 
@@ -187,7 +182,6 @@ bot.on('callback_query', async q => {
     );
   } catch (e) {
     console.error('CALLBACK ERROR:', e.message);
-    bot.sendMessage(q.message.chat.id, 'Error, coba lagi').catch(() => {});
   }
 });
 
