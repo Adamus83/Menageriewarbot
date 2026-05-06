@@ -1,113 +1,54 @@
-const { Telegraf } = require('telegraf');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
-const express = require('express');
+// ============================================================
+// MENAGERIE WARS - Node.js Full Game (Railway Ready)
+// Port from Google Apps Script + existing wallet bot
+// ============================================================
+const TelegramBot = require('node-telegram-bot-api');
+const { google } = require('googleapis');
+const http = require('http');
 
-// === ENV CHECK ===
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
-const ADMIN_ID = process.env.ADMIN_ID;
 const PORT = process.env.PORT || 3000;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
+const PRIVATE_KEY = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+
+// Health check
+http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('Menagerie Wars Bot OK');
+}).listen(PORT, () => console.log(`🌐 Health check on port ${PORT}`));
 
 console.log('🔍 Checking ENV...');
-if (!BOT_TOKEN ||!GOOGLE_CLIENT_EMAIL ||!GOOGLE_PRIVATE_KEY ||!GOOGLE_SHEET_ID) {
-  console.error('❌ ENV tidak lengkap. Pastikan BOT_TOKEN, GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SHEET_ID ada');
+if (!BOT_TOKEN || !SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) {
+  console.error('❌ Missing ENV variables');
   process.exit(1);
 }
 console.log('✅ ENV OK');
 
-const bot = new Telegraf(BOT_TOKEN);
-const app = express();
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Health check for Railway
-app.get('/', (req, res) => res.send('Menagerie Bot OK'));
-app.listen(PORT, () => console.log('🌐 Health check on port', PORT));
+const auth = new google.auth.JWT(CLIENT_EMAIL, null, PRIVATE_KEY, ['https://www.googleapis.com/auth/spreadsheets']);
+const sheets = google.sheets({ version: 'v4', auth });
 
-// Google Sheets
-let doc;
-let sheet;
+const CLANS = {
+  canis: { name: '🐺 Canis Alliance', buff: 'Produksi koin +20%', species: ['Serigala Abu-abu','Rubah Api','Anjing Siberian','Coyote Gurun','Jakal Emas'], starter: 'Serigala Abu-abu' },
+  felis: { name: '🐱 Felis Dominion', buff: 'Breeding +25% cepat', species: ['Kucing Hutan','Harimau Putih','Panther Hitam','Lynx Salju','Cheetah Emas'], starter: 'Kucing Hutan' },
+  morphos: { name: '🦎 Morphos Collective', buff: 'Makanan -30%', species: ['Tokek Zamrud','Ular Python','Bunglon Pelangi','Katak Racun','Salamander Api'], starter: 'Tokek Zamrud' },
+  equine: { name: '🐴 Equine Ascendancy', buff: '+5 slot kandang', species: ['Kuda Mustang','Zebra Savana','Keledai Gunung','Rusa Perak','Bison Putih'], starter: 'Kuda Mustang' },
+  aves: { name: '🦜 Aves Dominion', buff: 'Booster gratis/hari', species: ['Elang Perak','Macaw Merah','Merak Bulan','Gagak Malam','Hantu Salju'], starter: 'Elang Perak' }
+};
 
-async function initSheet() {
+async function initSheets() {
   try {
-    const auth = new JWT({
-      email: GOOGLE_CLIENT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-    doc = new GoogleSpreadsheet(GOOGLE_SHEET_ID, auth);
-    await doc.loadInfo();
-    sheet = doc.sheetsByIndex[0];
-    console.log('✅ Google Sheet connected:', doc.title);
-  } catch (e) {
-    console.error('❌ GOOGLE SHEET ERROR:', e.message);
-    throw e;
-  }
-}
-
-async function getPlayerSheet(userId) {
-  if (!sheet) await initSheet();
-  const rows = await sheet.getRows();
-  let player = rows.find(r => r.get('user_id') == userId);
-  if (!player) {
-    player = await sheet.addRow({
-      user_id: userId,
-      username: '',
-      saldo: 0,
-      menagerie: '[]',
-      last_daily: '',
-    });
-  }
-  return player;
-}
-
-// Commands
-bot.start(async (ctx) => {
-  try {
-    const player = await getPlayerSheet(ctx.from.id);
-    await player.set('username', ctx.from.username || ctx.from.first_name);
-    ctx.reply('🎮 Selamat datang di Menagerie Wars!\n\n/saldo - cek saldo\n/topup <jumlah> - isi saldo\n/daily - klaim harian');
-  } catch (e) {
-    ctx.reply('❌ Error koneksi Sheet: ' + e.message);
-  }
-});
-
-bot.command('saldo', async (ctx) => {
-  const p = await getPlayerSheet(ctx.from.id);
-  ctx.reply(`💰 Saldo kamu: ${p.get('saldo') || 0}`);
-});
-
-bot.command('daily', async (ctx) => {
-  const p = await getPlayerSheet(ctx.from.id);
-  const today = new Date().toDateString();
-  if (p.get('last_daily') === today) return ctx.reply('⏳ Daily sudah diklaim hari ini');
-  const saldo = Number(p.get('saldo') || 0) + 100;
-  await p.set('saldo', saldo);
-  await p.set('last_daily', today);
-  ctx.reply('✅ Daily +100! Saldo: ' + saldo);
-});
-
-bot.command('topup', async (ctx) => {
-  const amount = Number(ctx.message.text.split(' ')[1]);
-  if (!amount) return ctx.reply('Format: /topup 50000');
-  const p = await getPlayerSheet(ctx.from.id);
-  await p.set('saldo', Number(p.get('saldo') || 0) + amount);
-  ctx.reply(`✅ Topup ${amount} berhasil`);
-  if (ADMIN_ID) bot.telegram.sendMessage(ADMIN_ID, `💸 Topup: @${ctx.from.username} +${amount}`);
-});
-
-// Error handling
-bot.catch((err, ctx) => {
-  console.error('❌ TELEGRAM ERROR:', err.message);
-});
-
-bot.launch()
- .then(() => console.log('✅ Bot started'))
- .catch(e => {
-    console.error('❌ TELEGRAM LAUNCH FAILED:', e.message);
-    process.exit(1);
-  });
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+    const titles = meta.data.sheets.map(s => s.properties.title);
+    const needed = [
+      { title: 'Users', headers: ['userId','name','coins','premium','clan','joined','slots'] },
+      { title: 'Pets', headers: ['petId','ownerId','species','clan','level','prod','lastFed','breedCount'] },
+      { title: 'Market', headers: ['listingId','sellerId','petId','price','status'] },
+      { title: 'Clans', headers: ['clanId','name','members'] }
+    ];
+    for (const n of needed) {
+      if (!titles.includes(n.title)) {
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: n.title } } }] } });
+        await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `${n.title}!A1:G1`, valueInputOption: 'RAW', requestBody: { values
