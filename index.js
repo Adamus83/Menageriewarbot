@@ -10,11 +10,14 @@ process.on('unhandledRejection', (reason) => {
   console.error('REJECTION:', reason?.message || reason);
 });
 
-// ===== CONFIG =====
+// ===== HEALTH SERVER (wajib untuk Railway) =====
 const PORT = process.env.PORT || 3000;
-const URL = process.env.RAILWAY_PUBLIC_DOMAIN 
-  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
-  : process.env.URL || `http://localhost:${PORT}`;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('OK');
+}).listen(PORT, '0.0.0.0', () => {
+  console.log(`HEALTH:${PORT}`);
+});
 
 // ===== GOOGLE AUTH =====
 const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
@@ -30,7 +33,9 @@ try {
     privateKey,
     ['https://www.googleapis.com/auth/spreadsheets']
   );
-  auth.authorize().then(() => console.log('AUTH:OK')).catch(e => console.error('AUTH:FAIL', e.message));
+  auth.authorize()
+    .then(() => console.log('AUTH:OK'))
+    .catch(e => console.error('AUTH:FAIL', e.message));
 } catch (e) {
   console.error('AUTH INIT ERROR:', e.message);
 }
@@ -38,17 +43,10 @@ try {
 const sheets = google.sheets({ version: 'v4', auth });
 const SHEET = process.env.GOOGLE_SHEET_ID;
 
-// ===== BOT SETUP (WEBHOOK MODE) =====
+// ===== BOT SETUP (POLLING) =====
 let bot;
 try {
-  bot = new TelegramBot(process.env.BOT_TOKEN, { 
-    webHook: { port: PORT }
-  });
-  bot.setWebHook(`${URL}/bot`).then(() => {
-    console.log(`WEBHOOK SET: ${URL}/bot`);
-  }).catch(e => {
-    console.error('WEBHOOK ERROR:', e.message);
-  });
+  bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
   console.log('BOT:OK');
 } catch (e) {
   console.error('BOT INIT ERROR:', e.message);
